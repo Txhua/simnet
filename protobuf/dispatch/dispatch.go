@@ -66,11 +66,11 @@ func (md *MessageDispatch) Register(mid int64, handle interface{}) {
 	md.handle[mid] = info
 }
 
-func (md *MessageDispatch) Dispatch(request api.IRequest) (proto.Message, error) {
+func (md *MessageDispatch) Dispatch(serialize api.ISerializer, request api.IRequest) (proto.Message, error) {
 	var (
-		info *handleFunctionInfo
-		pb   proto.Message
-		ok   bool
+		info        *handleFunctionInfo
+		ok          bool
+		inputObject reflect.Value
 	)
 
 	msg := request.Message()
@@ -82,14 +82,18 @@ func (md *MessageDispatch) Dispatch(request api.IRequest) (proto.Message, error)
 		return nil, nil
 	}
 
-	inputObject := reflect.New(info.Type.In(1).Elem())
-	if pb, ok = inputObject.Interface().(proto.Message); !ok {
-		return nil, nil
-	}
-
-	err := proto.Unmarshal(msgData, pb)
-	if err != nil {
-		return nil, nil
+	if info.Type.In(1).Kind() == reflect.Ptr {
+		inputObject = reflect.New(info.Type.In(1).Elem())
+		err := serialize.Unmarshal(msgData, inputObject.Interface())
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		inputObject = reflect.New(info.Type.In(1).Elem()).Elem()
+		err := serialize.Unmarshal(msgData, inputObject.Addr().Interface())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var inputValues = []reflect.Value{

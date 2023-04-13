@@ -11,6 +11,7 @@ package dispatch
 import (
 	"context"
 	"fmt"
+	"simnet/protobuf"
 	"simnet/protobuf/pb"
 	"simnet/service"
 	"testing"
@@ -62,8 +63,9 @@ func TestMessageDispatch_Dispatch(t *testing.T) {
 	re := &service.Request{}
 	re.SetMessage(msg)
 
-	resp, err := dispatch.Dispatch(re)
+	ser := protobuf.NewSerializer()
+	resp, err := dispatch.Dispatch(ser, re)
 
-	fmt.Printf("resp : %v", resp)
+	fmt.Println(resp)
 
 }

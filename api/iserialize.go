@@ -7,3 +7,18 @@
  */
 
 package api
+
+type (
+	ISerializer interface {
+		Marshaler
+		Unmarshaler
+	}
+
+	Marshaler interface {
+		Marshal(interface{}) ([]byte, error)
+	}
+
+	Unmarshaler interface {
+		Unmarshal([]byte, interface{}) error
+	}
+)
