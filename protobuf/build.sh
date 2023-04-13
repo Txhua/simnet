@@ -10,7 +10,7 @@ osName=`uname`
 #  export PATH="$wd/bin/mac:$PATH"
 #fi
 
-root="/Users/txhua/TxhuaCode/goCode/simnet/protobuf/proto"
+root="/root/TxhuaCode/go/simnet/protobuf/proto"
 pkg="/pb"
 
 for file in $root/*

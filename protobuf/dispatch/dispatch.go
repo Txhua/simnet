@@ -1,19 +1,15 @@
-/*
- * @Date: 2023/4/13
- * @LastEditors: txhua
- * @LastEditTime: 周四
- * @FilePath: protobuf/dispatch
- * @Description:
- */
-
 package dispatch
 
 import (
 	"context"
-	"fmt"
-	"github.com/golang/protobuf/proto"
 	"reflect"
 	"simnet/api"
+
+	"google.golang.org/protobuf/proto"
+)
+
+const (
+	callback = "Handle"
 )
 
 type (
@@ -40,8 +36,29 @@ func (md *MessageDispatch) Register(mid int64, handle interface{}) {
 	reflectValue := reflect.ValueOf(handle)
 	reflectType := reflectValue.Type()
 
-	t := reflectType.Kind()
-	fmt.Println(t)
+	if reflectType.Kind() == reflect.Struct {
+		newValue := reflect.New(reflectType)
+		newValue.Elem().Set(reflectValue)
+		reflectValue = newValue
+		reflectType = reflectValue.Type()
+		funcInst := reflectValue.MethodByName(callback)
+		if !funcInst.IsValid() {
+			return
+		}
+
+		if funcInst.Type().NumIn() != 2 || funcInst.Type().NumOut() != 2 {
+			return
+		}
+
+		if funcInst.Type().In(0).String() != "context.Context" {
+			return
+		}
+
+		if funcInst.Type().Out(1).String() != "error" {
+			return
+		}
+	}
+
 	info := &handleFunctionInfo{
 		Type:  reflectType,
 		Value: reflectValue,
@@ -49,32 +66,30 @@ func (md *MessageDispatch) Register(mid int64, handle interface{}) {
 	md.handle[mid] = info
 }
 
-func Register[_Type proto.Message](dispatch *MessageDispatch, mid int64, handle func(ctx context.Context, message _Type)) {
-	dispatch.Register(mid, handle)
-}
-
-func (md *MessageDispatch) Dispatch(request api.IRequest) {
-	msgId := request.Msg().MsgID()
-	msg := request.Msg().MsgData()
-
+func (md *MessageDispatch) Dispatch(request api.IRequest) (proto.Message, error) {
 	var (
 		info *handleFunctionInfo
 		pb   proto.Message
 		ok   bool
 	)
 
+	msg := request.Message()
+	msgId := msg.MsgID()
+	msgData := msg.MsgData()
+
 	info, ok = md.handle[msgId]
 	if !ok {
-		return
-	}
-	inputObject := reflect.New(info.Type.In(1).Elem()).Elem()
-	if pb, ok = inputObject.Interface().(proto.Message); !ok {
-		return
+		return nil, nil
 	}
 
-	err := proto.Unmarshal(msg, pb)
+	inputObject := reflect.New(info.Type.In(1).Elem())
+	if pb, ok = inputObject.Interface().(proto.Message); !ok {
+		return nil, nil
+	}
+
+	err := proto.Unmarshal(msgData, pb)
 	if err != nil {
-		return
+		return nil, nil
 	}
 
 	var inputValues = []reflect.Value{
@@ -83,5 +98,17 @@ func (md *MessageDispatch) Dispatch(request api.IRequest) {
 
 	inputValues = append(inputValues, inputObject)
 
-	_ = info.Value.Call(inputValues)
+	results := info.Value.Call(inputValues)
+	response := results[0].Interface().(proto.Message)
+	var er error
+	if !results[1].IsNil() {
+		if err, ok := results[1].Interface().(error); ok {
+			er = err
+		}
+	}
+	return response, er
+}
+
+func Register[_Type proto.Message](dispatch *MessageDispatch, mid int64, handle func(ctx context.Context, message _Type) (proto.Message, error)) {
+	dispatch.Register(mid, handle)
 }

@@ -9,5 +9,5 @@
 package api
 
 type IRequest interface {
-	Msg() IMessage
+	Message() IMessage
 }
