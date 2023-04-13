@@ -35,38 +35,70 @@ func (md *MessageDispatch) Register(mid int64, handle interface{}) {
 	}
 	reflectValue := reflect.ValueOf(handle)
 	reflectType := reflectValue.Type()
-
-	if reflectType.Kind() == reflect.Struct {
-		newValue := reflect.New(reflectType)
-		newValue.Elem().Set(reflectValue)
-		reflectValue = newValue
-		reflectType = reflectValue.Type()
-		funcInst := reflectValue.MethodByName(callback)
-		if !funcInst.IsValid() {
-			return
+	switch reflectType.Kind() {
+	case reflect.Struct:
+		{
+			newValue := reflect.New(reflectType)
+			newValue.Elem().Set(reflectValue)
+			reflectValue = newValue
+			reflectType = reflectValue.Type()
+			funcInst := reflectValue.MethodByName(callback)
+			if !funcInst.IsValid() {
+				return
+			}
+			info, err := md.checkFuncInfo(funcInst.Interface())
+			if err != nil {
+				panic(err)
+			}
+			md.handle[mid] = info
+			break
 		}
-
-		if funcInst.Type().NumIn() != 2 || funcInst.Type().NumOut() != 2 {
-			return
+	case reflect.Ptr:
+		{
+			funcInst := reflectValue.MethodByName(callback)
+			if !funcInst.IsValid() {
+				return
+			}
+			info, err := md.checkFuncInfo(funcInst.Interface())
+			if err != nil {
+				panic(err)
+			}
+			md.handle[mid] = info
+			break
 		}
-
-		if funcInst.Type().In(0).String() != "context.Context" {
-			return
+	case reflect.Func:
+		{
+			info := &handleFunctionInfo{
+				Type:  reflectType,
+				Value: reflectValue,
+			}
+			md.handle[mid] = info
 		}
+	}
+}
 
-		if funcInst.Type().Out(1).String() != "error" {
-			return
-		}
+func (md *MessageDispatch) checkFuncInfo(v interface{}) (*handleFunctionInfo, error) {
+	reflectType := reflect.TypeOf(v)
+	if reflectType.NumIn() != 2 || reflectType.NumOut() != 2 {
+		return nil, nil
+	}
+
+	if reflectType.In(0).String() != "context.Context" {
+		return nil, nil
+	}
+
+	if reflectType.Out(1).String() != "error" {
+		return nil, nil
 	}
 
 	info := &handleFunctionInfo{
 		Type:  reflectType,
-		Value: reflectValue,
+		Value: reflect.ValueOf(v),
 	}
-	md.handle[mid] = info
+	return info, nil
 }
 
-func (md *MessageDispatch) Dispatch(serialize api.ISerializer, request api.IRequest) (proto.Message, error) {
+func (md *MessageDispatch) Dispatch(serialize api.ISerializer, request api.IRequest) (response proto.Message, err error) {
 	var (
 		info        *handleFunctionInfo
 		ok          bool
@@ -84,15 +116,15 @@ func (md *MessageDispatch) Dispatch(serialize api.ISerializer, request api.IRequ
 
 	if info.Type.In(1).Kind() == reflect.Ptr {
 		inputObject = reflect.New(info.Type.In(1).Elem())
-		err := serialize.Unmarshal(msgData, inputObject.Interface())
+		err = serialize.Unmarshal(msgData, inputObject.Interface())
 		if err != nil {
-			return nil, err
+			return
 		}
 	} else {
 		inputObject = reflect.New(info.Type.In(1).Elem()).Elem()
-		err := serialize.Unmarshal(msgData, inputObject.Addr().Interface())
+		err = serialize.Unmarshal(msgData, inputObject.Addr().Interface())
 		if err != nil {
-			return nil, err
+			return
 		}
 	}
 
@@ -103,14 +135,16 @@ func (md *MessageDispatch) Dispatch(serialize api.ISerializer, request api.IRequ
 	inputValues = append(inputValues, inputObject)
 
 	results := info.Value.Call(inputValues)
-	response := results[0].Interface().(proto.Message)
-	var er error
+	if response, ok = results[0].Interface().(proto.Message); !ok {
+		return
+	}
+
 	if !results[1].IsNil() {
-		if err, ok := results[1].Interface().(error); ok {
-			er = err
+		if err, ok = results[1].Interface().(error); ok {
+			return
 		}
 	}
-	return response, er
+	return response, nil
 }
 
 func Register[_Type proto.Message](dispatch *MessageDispatch, mid int64, handle func(ctx context.Context, message _Type) (proto.Message, error)) {
