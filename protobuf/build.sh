@@ -4,13 +4,13 @@
 wd=`pwd`
 osName=`uname`
 
-if [ "$osName" = "Linux" ]; then
-  export PATH="$wd/bin/linux:$PATH"
-else
-  export PATH="$wd/bin/mac:$PATH"
-fi
+#if [ "$osName" = "Linux" ]; then
+#  export PATH="$wd/bin/linux:$PATH"
+#else
+#  export PATH="$wd/bin/mac:$PATH"
+#fi
 
-root="/Users/txhua/TxhuaCode/product20/zmg2-protobuf/proto"
+root="/Users/txhua/TxhuaCode/goCode/simnet/protobuf/proto"
 pkg="/pb"
 
 for file in $root/*
