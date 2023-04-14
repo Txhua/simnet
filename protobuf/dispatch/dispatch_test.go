@@ -69,30 +69,30 @@ func TestMessageDispatch_RegisterFunc(t *testing.T) {
 }
 
 func TestMessageDispatch_RegisterStruct(t *testing.T) {
-	u := &User{}
-	dispatch.Register(2, *u)
-
-	req := &pb.UserInfo{}
-	req.Id = 12
-	req.Age = 25
-
-	str, err := proto.Marshal(req)
-	if err != nil {
-		panic(err)
-	}
-
-	msg := &service.Message{}
-	msg.SetMsgID(2)
-	msg.SetMsgData(str)
-
-	re := &service.Request{}
-	re.SetMessage(msg)
-
-	ser := protobuf.NewSerializer()
-	resp, err := dispatch.Dispatch(ser, re)
-	if err != nil {
-		panic(err)
-	} else {
-		fmt.Println(resp)
-	}
+	//u := &User{}
+	//dispatch.Register(2, *u)
+	//
+	//req := &pb.UserInfo{}
+	//req.Id = 12
+	//req.Age = 25
+	//
+	//str, err := proto.Marshal(req)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//
+	//msg := &service.Message{}
+	//msg.SetMsgID(2)
+	//msg.SetMsgData(str)
+	//
+	//re := &service.Request{}
+	//re.SetMessage(msg)
+	//
+	//ser := protobuf.NewSerializer()
+	//resp, err := dispatch.Dispatch(ser, re)
+	//if err != nil {
+	//	panic(err)
+	//} else {
+	//	fmt.Println(resp)
+	//}
 }

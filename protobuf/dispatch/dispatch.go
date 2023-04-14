@@ -2,151 +2,76 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
+	"google.golang.org/protobuf/proto"
 	"reflect"
 	"simnet/api"
-
-	"google.golang.org/protobuf/proto"
-)
-
-const (
-	callback = "Handle"
 )
 
 type (
-	MessageDispatch struct {
-		handle map[int64]*handleFunctionInfo
+	IMessageCallback interface {
+		OnMessage(ctx context.Context, message proto.Message) (proto.Message, error)
+		GetType() reflect.Type
 	}
-
-	handleFunctionInfo struct {
-		Type  reflect.Type
-		Value reflect.Value
+	callbackAble[_Type any] struct {
+		callback  func(ctx context.Context, message _Type) (proto.Message, error)
+		protoType reflect.Type
 	}
 )
 
+func (cb *callbackAble[_Type]) GetType() reflect.Type {
+	return cb.protoType
+}
+
+func (cb *callbackAble[_Type]) OnMessage(ctx context.Context, message proto.Message) (proto.Message, error) {
+	// 判断传入的消息对象是否属于期望的类型
+	p, ok := message.(_Type)
+	if !ok {
+		return nil, fmt.Errorf("unexpected message type: %T", message)
+	}
+
+	// 调用回调函数处理消息，并返回处理结果
+	return cb.callback(ctx, p)
+}
+
+type MessageDispatch struct {
+	handle map[int64]IMessageCallback
+}
+
 func NewMessageDispatch() *MessageDispatch {
 	return &MessageDispatch{
-		handle: make(map[int64]*handleFunctionInfo),
+		handle: make(map[int64]IMessageCallback),
 	}
-}
-
-func (md *MessageDispatch) Register(mid int64, handle interface{}) {
-	if _, ok := md.handle[mid]; ok {
-		return
-	}
-	reflectValue := reflect.ValueOf(handle)
-	reflectType := reflectValue.Type()
-	switch reflectType.Kind() {
-	case reflect.Struct:
-		{
-			newValue := reflect.New(reflectType)
-			newValue.Elem().Set(reflectValue)
-			reflectValue = newValue
-			reflectType = reflectValue.Type()
-			funcInst := reflectValue.MethodByName(callback)
-			if !funcInst.IsValid() {
-				return
-			}
-			info, err := md.checkFuncInfo(funcInst.Interface())
-			if err != nil {
-				panic(err)
-			}
-			md.handle[mid] = info
-			break
-		}
-	case reflect.Ptr:
-		{
-			funcInst := reflectValue.MethodByName(callback)
-			if !funcInst.IsValid() {
-				return
-			}
-			info, err := md.checkFuncInfo(funcInst.Interface())
-			if err != nil {
-				panic(err)
-			}
-			md.handle[mid] = info
-			break
-		}
-	case reflect.Func:
-		{
-			info := &handleFunctionInfo{
-				Type:  reflectType,
-				Value: reflectValue,
-			}
-			md.handle[mid] = info
-		}
-	}
-}
-
-func (md *MessageDispatch) checkFuncInfo(v interface{}) (*handleFunctionInfo, error) {
-	reflectType := reflect.TypeOf(v)
-	if reflectType.NumIn() != 2 || reflectType.NumOut() != 2 {
-		return nil, nil
-	}
-
-	if reflectType.In(0).String() != "context.Context" {
-		return nil, nil
-	}
-
-	if reflectType.Out(1).String() != "error" {
-		return nil, nil
-	}
-
-	info := &handleFunctionInfo{
-		Type:  reflectType,
-		Value: reflect.ValueOf(v),
-	}
-	return info, nil
 }
 
 func (md *MessageDispatch) Dispatch(serialize api.ISerializer, request api.IRequest) (response proto.Message, err error) {
-	var (
-		info        *handleFunctionInfo
-		ok          bool
-		inputObject reflect.Value
-	)
-
 	msg := request.Message()
 	msgId := msg.MsgID()
 	msgData := msg.MsgData()
-
-	info, ok = md.handle[msgId]
+	info, ok := md.handle[msgId]
 	if !ok {
 		return nil, nil
 	}
-
-	if info.Type.In(1).Kind() == reflect.Ptr {
-		inputObject = reflect.New(info.Type.In(1).Elem())
-		err = serialize.Unmarshal(msgData, inputObject.Interface())
-		if err != nil {
-			return
-		}
-	} else {
-		inputObject = reflect.New(info.Type.In(1).Elem()).Elem()
-		err = serialize.Unmarshal(msgData, inputObject.Addr().Interface())
-		if err != nil {
-			return
-		}
-	}
-
-	var inputValues = []reflect.Value{
-		reflect.ValueOf(context.Background()),
-	}
-
-	inputValues = append(inputValues, inputObject)
-
-	results := info.Value.Call(inputValues)
-	if response, ok = results[0].Interface().(proto.Message); !ok {
+	reflectType := info.GetType()
+	inputObject := reflect.New(reflectType).Elem()
+	err = serialize.Unmarshal(msgData, inputObject.Addr().Interface())
+	if err != nil {
 		return
 	}
-
-	if !results[1].IsNil() {
-		if err, ok = results[1].Interface().(error); ok {
-			return
-		}
+	pb, ok := inputObject.Addr().Interface().(proto.Message)
+	if !ok {
+		panic("failed protobuf")
 	}
-	return response, nil
+
+	return info.OnMessage(context.Background(), pb)
 }
 
 func Register[_Type proto.Message](dispatch *MessageDispatch, mid int64, handle func(ctx context.Context, message _Type) (proto.Message, error)) {
-	dispatch.Register(mid, handle)
+	if _, ok := dispatch.handle[mid]; ok {
+		return
+	}
+	dispatch.handle[mid] = &callbackAble[_Type]{
+		callback:  handle,
+		protoType: reflect.TypeOf(handle).In(1).Elem(),
+	}
 }
