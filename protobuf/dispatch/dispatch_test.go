@@ -22,6 +22,7 @@ import (
 var dispatch = NewMessageDispatch()
 
 type User struct {
+	name string
 }
 
 func (u *User) MessageCallback(ctx context.Context, info *pb.UserInfo) (proto.Message, error) {
@@ -40,7 +41,9 @@ func (u *User) Handle(ctx context.Context, info *pb.UserInfo) (proto.Message, er
 
 func TestMessageDispatch_RegisterFunc(t *testing.T) {
 	// 注册消息处理的回调
-	u := &User{}
+	u := &User{
+		name: "xiaoming",
+	}
 	Register[*pb.UserInfo](dispatch, 2, u.MessageCallback)
 
 	req := &pb.UserInfo{}

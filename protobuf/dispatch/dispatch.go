@@ -17,6 +17,9 @@ type (
 		callback  func(ctx context.Context, message _Type) (proto.Message, error)
 		protoType reflect.Type
 	}
+	MessageDispatch struct {
+		handle map[int64]IMessageCallback
+	}
 )
 
 func (cb *callbackAble[_Type]) GetType() reflect.Type {
@@ -32,10 +35,6 @@ func (cb *callbackAble[_Type]) OnMessage(ctx context.Context, message proto.Mess
 
 	// 调用回调函数处理消息，并返回处理结果
 	return cb.callback(ctx, p)
-}
-
-type MessageDispatch struct {
-	handle map[int64]IMessageCallback
 }
 
 func NewMessageDispatch() *MessageDispatch {
@@ -56,11 +55,11 @@ func (md *MessageDispatch) Dispatch(serialize api.ISerializer, request api.IRequ
 	inputObject := reflect.New(reflectType).Elem()
 	err = serialize.Unmarshal(msgData, inputObject.Addr().Interface())
 	if err != nil {
-		return
+		return nil, fmt.Errorf("unmarshal message error: %s", err.Error())
 	}
 	pb, ok := inputObject.Addr().Interface().(proto.Message)
 	if !ok {
-		panic("failed protobuf")
+		return nil, fmt.Errorf("failed to convert message to proto.Message")
 	}
 
 	return info.OnMessage(context.Background(), pb)
@@ -70,8 +69,14 @@ func Register[_Type proto.Message](dispatch *MessageDispatch, mid int64, handle 
 	if _, ok := dispatch.handle[mid]; ok {
 		return
 	}
+	// 类型检查
+	var m _Type
+	argType := reflect.TypeOf(m).Elem()
+	if argType != reflect.TypeOf(handle).In(1).Elem() {
+		panic(fmt.Sprintf("register error: expected argument type %v, but got %v", argType, reflect.TypeOf(handle).In(1).Elem()))
+	}
 	dispatch.handle[mid] = &callbackAble[_Type]{
 		callback:  handle,
-		protoType: reflect.TypeOf(handle).In(1).Elem(),
+		protoType: argType,
 	}
 }
