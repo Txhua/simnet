@@ -16,18 +16,17 @@ import (
 	"time"
 )
 
-type Log struct {
-	logger *zap.SugaredLogger
-}
+var (
+	Logger *zap.SugaredLogger
+)
 
-func NewLog() *Log {
+func InitLog() {
 	config := zap.NewProductionConfig()
 	config.EncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 		enc.AppendString(t.Format("2006-01-02 15:04:05"))
 	}
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
-	config.EncoderConfig.CallerKey = "file"
 	config.EncoderConfig.EncodeDuration = func(d time.Duration, enc zapcore.PrimitiveArrayEncoder) {
 		enc.AppendInt64(int64(d) / 1000000)
 	}
@@ -80,45 +79,5 @@ func NewLog() *Log {
 	)
 
 	logger := zap.New(zapcore.NewTee(debugCore, infoCore, errorCore, panicCore), zap.AddCaller())
-	return &Log{logger: logger.Sugar()}
-}
-
-func (l *Log) Debugf(template string, args ...interface{}) {
-	l.logger.Debugf(template, args...)
-}
-
-func (l *Log) Debug(args ...interface{}) {
-	l.logger.Debug(args...)
-}
-
-func (l *Log) Infof(template string, args ...interface{}) {
-	l.logger.Infof(template, args...)
-}
-
-func (l *Log) Info(args ...interface{}) {
-	l.logger.Info(args...)
-}
-
-func (l *Log) Warnf(template string, args ...interface{}) {
-	l.logger.Warnf(template, args)
-}
-
-func (l *Log) Warn(args ...interface{}) {
-	l.logger.Warn(args)
-}
-
-func (l *Log) Errorf(template string, args ...interface{}) {
-	l.logger.Errorf(template, args)
-}
-
-func (l *Log) Error(args ...interface{}) {
-	l.logger.Error(args)
-}
-
-func (l *Log) Panicf(template string, args ...interface{}) {
-	l.logger.Panicf(template, args)
-}
-
-func (l *Log) Panic(args ...interface{}) {
-	l.logger.Panic(args)
+	Logger = logger.Sugar()
 }

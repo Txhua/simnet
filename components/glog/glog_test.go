@@ -11,6 +11,6 @@ package glog
 import "testing"
 
 func TestLog(t *testing.T) {
-	log := NewLog()
-	log.Debugf("%s", "hello glog")
+	InitLog()
+	Logger.Debugf("%s", "hello glog")
 }
