@@ -1,6 +1,9 @@
 package protobuf
 
-import "google.golang.org/protobuf/proto"
+import (
+	"google.golang.org/protobuf/proto"
+	"simnet/constants"
+)
 
 // Serializer implements the serialize.Serializer interface
 type Serializer struct{}
@@ -14,7 +17,7 @@ func NewSerializer() *Serializer {
 func (s *Serializer) Marshal(v interface{}) ([]byte, error) {
 	pb, ok := v.(proto.Message)
 	if !ok {
-		return nil, nil
+		return nil, constants.ErrWrongValueProtobuf
 	}
 	return proto.Marshal(pb)
 }
@@ -24,7 +27,7 @@ func (s *Serializer) Marshal(v interface{}) ([]byte, error) {
 func (s *Serializer) Unmarshal(data []byte, v interface{}) error {
 	pb, ok := v.(proto.Message)
 	if !ok {
-		return nil
+		return constants.ErrWrongValueProtobuf
 	}
 	return proto.Unmarshal(data, pb)
 }

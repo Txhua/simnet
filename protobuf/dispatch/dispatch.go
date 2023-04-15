@@ -2,10 +2,11 @@ package dispatch
 
 import (
 	"context"
-	"fmt"
 	"google.golang.org/protobuf/proto"
 	"reflect"
 	"simnet/api"
+	"simnet/components/glog"
+	"simnet/constants"
 )
 
 type (
@@ -30,7 +31,7 @@ func (cb *callbackAble[_Type]) OnMessage(ctx context.Context, message proto.Mess
 	// 判断传入的消息对象是否属于期望的类型
 	p, ok := message.(_Type)
 	if !ok {
-		return nil, fmt.Errorf("unexpected message type: %T", message)
+		return nil, constants.ErrWrongValueType
 	}
 
 	// 调用回调函数处理消息，并返回处理结果
@@ -49,17 +50,19 @@ func (md *MessageDispatch) Dispatch(serialize api.ISerializer, request api.IRequ
 	msgData := msg.MsgData()
 	info, ok := md.handle[msgId]
 	if !ok {
-		return nil, nil
+		glog.Logger.Errorf("msgId not register! msgId : %d ", msgId)
+		return nil, constants.ErrWrongMsgIDRegister
 	}
 	reflectType := info.GetType()
 	inputObject := reflect.New(reflectType).Elem()
 	err = serialize.Unmarshal(msgData, inputObject.Addr().Interface())
 	if err != nil {
-		return nil, fmt.Errorf("unmarshal message error: %s", err.Error())
+		glog.Logger.Errorf("unmarshal message error! msgId : %d ", msgId)
+		return nil, err
 	}
 	pb, ok := inputObject.Addr().Interface().(proto.Message)
 	if !ok {
-		return nil, fmt.Errorf("failed to convert message to proto.Message")
+		return nil, constants.ErrWrongValueProtobuf
 	}
 
 	return info.OnMessage(context.Background(), pb)
@@ -73,7 +76,7 @@ func Register[_Type proto.Message](dispatch *MessageDispatch, mid int64, handle 
 	var m _Type
 	argType := reflect.TypeOf(m).Elem()
 	if argType != reflect.TypeOf(handle).In(1).Elem() {
-		panic(fmt.Sprintf("register error: expected argument type %v, but got %v", argType, reflect.TypeOf(handle).In(1).Elem()))
+		glog.Logger.Panicf("register error: expected argument type %v, but got %v", argType, reflect.TypeOf(handle).In(1).Elem())
 	}
 	dispatch.handle[mid] = &callbackAble[_Type]{
 		callback:  handle,
